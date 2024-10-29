@@ -14,6 +14,7 @@ CompilerOptions = {
 
 local recursionLimit = 15
 local localIncludePath = {}
+local module = {}
 
 
 local TokenizeAssembly
@@ -92,7 +93,7 @@ end
 
 local asmDirectives = {
     ["loadTime"] = {
-        {{".include"}, 1, function(callingFile, recursion, args)
+        {["tags"] = {".include"}, ["minArgs"] = 1, ["maxArgs"] = 1, ["callback"] = function(callingFile, recursion, args)
             local file = tostring(args[1])
             local path = findFile(file)
             assert(path, "could not find file \"" .. file .. "\"")
@@ -100,7 +101,7 @@ local asmDirectives = {
             assert(recursion < recursionLimit, "hit recursion limit! Maximum recursion depth is " .. recursionLimit)
             return loadAssembly(path, recursion)
         end},
-        {{".includePath"}, 1, function(callingFile, recursion, args)
+        {["tags"] = {".includePath"}, ["minArgs"] = 1, ["maxArgs"] = 1, ["callback"] = function(callingFile, recursion, args)
             local path = tostring(args[1])
             local fp = findFolder(path)
             assert(fp, "could not find direcory \"" .. path .. "\"")
@@ -110,6 +111,29 @@ local asmDirectives = {
                 error("Tried to add an include path to the localIncludePath but localIncludePath is not initialised. This should be impossible!", -1)
             end
             return nil
+        end},
+        {["tags"] = {".includeBin"}, ["minArgs"] = 1, ["maxArgs"] = 3, ["callback"] = function(callingFile, recursion, args)
+            local file = tostring(args[1])
+            local path = findFile(file)
+            assert(path, "could not find file \"" .. file .. "\"")
+            local format = args[2] or "byte"
+            local endian = args[3] or module["archEndian"]
+            assert(endian == "little" or endian == "big", "endianes for .includeBin must be \"little\" or \"big\" not \"" .. tostring(endian) .. "\"")
+            assert(format == "byte" or format == "word" or format == "long", "format for .includeBin must be \"byte\", \"word\" or \"long\" not \"" .. format .. "\"")
+            local f = io.open(path, "rb")
+            assert(f, "could not open file \"" .. file .. "\"")
+            local data = f:read("a")
+            f:close()
+            local fm = ".byte"
+            local sz = 1
+            if format == "word" then
+                fm = ".word"
+                sz = 2
+            elseif format == "long" then
+                fm = ".long"
+                sz = 4
+            end
+            return assembler["formatData"](data, fm, sz, 16, endian)
         end}
 
     }
